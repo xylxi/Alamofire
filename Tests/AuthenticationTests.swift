@@ -29,14 +29,9 @@ class AuthenticationTestCase: BaseTestCase {
     let password = "password"
     var URLString = ""
 
-    var manager: Manager!
-
     override func setUp() {
         super.setUp()
 
-        manager = Manager(configuration: NSURLSessionConfiguration.defaultSessionConfiguration())
-
-        // Clear out credentials
         let credentialStorage = NSURLCredentialStorage.sharedCredentialStorage()
 
         for (protectionSpace, credentials) in credentialStorage.allCredentials {
@@ -44,10 +39,6 @@ class AuthenticationTestCase: BaseTestCase {
                 credentialStorage.removeCredential(credential, forProtectionSpace: protectionSpace)
             }
         }
-
-        // Clear out cookies
-        let cookieStorage = NSHTTPCookieStorage.sharedHTTPCookieStorage()
-        cookieStorage.cookies?.forEach { cookieStorage.deleteCookie($0) }
     }
 }
 
@@ -69,7 +60,7 @@ class BasicAuthenticationTestCase: AuthenticationTestCase {
         var error: NSError?
 
         // When
-        manager.request(.GET, URLString)
+        Alamofire.request(.GET, URLString)
             .authenticate(user: "invalid", password: "credentials")
             .response { responseRequest, responseResponse, responseData, responseError in
                 request = responseRequest
@@ -84,10 +75,13 @@ class BasicAuthenticationTestCase: AuthenticationTestCase {
 
         // Then
         XCTAssertNotNil(request, "request should not be nil")
-        XCTAssertNotNil(response, "response should not be nil")
-        XCTAssertEqual(response?.statusCode ?? 0, 401, "response status code should be 401")
+        XCTAssertNil(response, "response should be nil")
         XCTAssertNotNil(data, "data should not be nil")
-        XCTAssertNil(error, "error should be nil")
+        XCTAssertNotNil(error, "error should not be nil")
+
+        if let code = error?.code {
+            XCTAssertEqual(code, -999, "error should be NSURLErrorDomain Code -999 'cancelled'")
+        }
     }
 
     func testHTTPBasicAuthenticationWithValidCredentials() {
@@ -100,7 +94,7 @@ class BasicAuthenticationTestCase: AuthenticationTestCase {
         var error: NSError?
 
         // When
-        manager.request(.GET, URLString)
+        Alamofire.request(.GET, URLString)
             .authenticate(user: user, password: password)
             .response { responseRequest, responseResponse, responseData, responseError in
                 request = responseRequest
@@ -142,7 +136,7 @@ class HTTPDigestAuthenticationTestCase: AuthenticationTestCase {
         var error: NSError?
 
         // When
-        manager.request(.GET, URLString)
+        Alamofire.request(.GET, URLString)
             .authenticate(user: "invalid", password: "credentials")
             .response { responseRequest, responseResponse, responseData, responseError in
                 request = responseRequest
@@ -157,10 +151,13 @@ class HTTPDigestAuthenticationTestCase: AuthenticationTestCase {
 
         // Then
         XCTAssertNotNil(request, "request should not be nil")
-        XCTAssertNotNil(response, "response should not be nil")
-        XCTAssertEqual(response?.statusCode ?? 0, 401, "response status code should be 401")
+        XCTAssertNil(response, "response should be nil")
         XCTAssertNotNil(data, "data should not be nil")
-        XCTAssertNil(error, "error should be nil")
+        XCTAssertNotNil(error, "error should not be nil")
+
+        if let code = error?.code {
+            XCTAssertEqual(code, -999, "error should be NSURLErrorDomain Code -999 'cancelled'")
+        }
     }
 
     func testHTTPDigestAuthenticationWithValidCredentials() {
@@ -173,7 +170,7 @@ class HTTPDigestAuthenticationTestCase: AuthenticationTestCase {
         var error: NSError?
 
         // When
-        manager.request(.GET, URLString)
+        Alamofire.request(.GET, URLString)
             .authenticate(user: user, password: password)
             .response { responseRequest, responseResponse, responseData, responseError in
                 request = responseRequest

@@ -27,6 +27,74 @@ class DetailViewController: UITableViewController {
     enum Sections: Int {
         case Headers, Body
     }
+    
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // 下载请求
+        let destination = Alamofire.Request.suggestedDownloadDestination(directory: .DocumentDirectory, domain: .UserDomainMask)
+        
+//        Alamofire.download(.GET, "https://codeload.github.com/Alamofire/Alamofire/zip/master", destination: destination)
+//            .progress { bytesRead, totalBytesRead, totalBytesExpectedToRead in
+//                print(totalBytesRead)
+//                
+//                // This closure is NOT called on the main queue for performance
+//                // reasons. To update your ui, dispatch to the main queue.
+//                dispatch_async(dispatch_get_main_queue()) {
+//                    print("Total bytes read on main queue: \(totalBytesRead)")
+//                }
+//            }
+//            .response { _, _, _, error in
+//                if let error = error {
+//                    print("Failed with error: \(error)")
+//                } else {
+//                    print("Downloaded file successfully")
+//                }
+//        }
+//        Alamofire.download(.GET, "https://codeload.github.com/Alamofire/Alamofire/zip/master", destination: destination)
+//            .progress1{ session , task , bytesRead, totalBytesRead, totalBytesExpectedToRead in
+//            dispatch_async(dispatch_get_main_queue()) {
+//                print("Total bytes read on main queue: \(totalBytesRead)")
+//            }
+//        }
+//        .response { _, _, _, error in
+//            if let error = error {
+//                print("Failed with error: \(error)")
+//            } else {
+//                print("Downloaded file successfully")
+//            }
+//        }
+        
+        let image = UIImage(named: "Logo")!
+        let data  = UIImageJPEGRepresentation(image, 0.5)!
+        Alamofire.upload(.POST, "http://www.renrenlab.com/testing/api/upload/image", headers: nil, multipartFormData: { (fdata) -> Void in
+            fdata.appendBodyPart(data: data, name: "file",fileName: "avatar" , mimeType: "image/JPEG")
+            }) { (encoding) -> Void in
+                switch encoding {
+                    // 编码成功就添加请求成功后的操作
+                case .Success(let upload, _, _):
+                    print(upload)
+                    upload.progress({ (b, t, te) -> Void in
+                        print("\(b)-->\(t)--->\(te)")
+                    })
+                    upload.responseJSON(completionHandler: { (response) -> Void in
+                        print(response)
+                    })
+                case .Failure(let error):
+                    print(error)
+                }
+        }
+        
+
+        
+//        Alamofire.upload(.POST, "", headers: nil, multipartFormData: { (<#MultipartFormData#>) -> Void in
+//            <#code#>
+//            }) { (<#Manager.MultipartFormDataEncodingResult#>) -> Void in
+//                <#code#>
+//        }
+    }
+    
 
     var request: Alamofire.Request? {
         didSet {
@@ -55,11 +123,13 @@ class DetailViewController: UITableViewController {
 
     override func awakeFromNib() {
         super.awakeFromNib()
-        refreshControl?.addTarget(self, action: #selector(DetailViewController.refresh), forControlEvents: .ValueChanged)
+        refreshControl?.addTarget(self, action: "refresh", forControlEvents: .ValueChanged)
+
     }
 
     override func viewDidAppear(animated: Bool) {
         super.viewDidAppear(animated)
+
         refresh()
     }
 
@@ -73,6 +143,9 @@ class DetailViewController: UITableViewController {
         refreshControl?.beginRefreshing()
 
         let start = CACurrentMediaTime()
+
+
+        
         request.responseString { response in
             let end = CACurrentMediaTime()
             self.elapsedTime = end - start
@@ -96,6 +169,10 @@ class DetailViewController: UITableViewController {
 
             self.tableView.reloadData()
             self.refreshControl?.endRefreshing()
+
+        }
+        request.delegate.queue.addOperationWithBlock{
+
         }
     }
 

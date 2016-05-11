@@ -30,13 +30,16 @@ import CoreServices
 
 /**
     Constructs `multipart/form-data` for uploads within an HTTP or HTTPS body. There are currently two ways to encode 
-    multipart form data. The first way is to encode the data directly in memory. This is very efficient, but can lead 
+    multipart form data. The first way is to encode the data directly in memory. This is very efficient, but can lead
     to memory issues if the dataset is too large. The second way is designed for larger datasets and will write all the 
     data to a single file on disk with all the proper boundary segmentation. The second approach MUST be used for 
     larger datasets such as video content, otherwise your app may run out of memory when trying to encode the dataset.
 
     For more information on `multipart/form-data` in general, please refer to the RFC-2388 and RFC-2045 specs as well
     and the w3 form documentation.
+ 
+    上传的小文件使用第一方法
+    上传大文件使用第二种方法
 
     - https://www.ietf.org/rfc/rfc2388.txt
     - https://www.ietf.org/rfc/rfc2045.txt
@@ -77,6 +80,7 @@ public class MultipartFormData {
 
     class BodyPart {
         let headers: [String: String]
+        //  数据流
         let bodyStream: NSInputStream
         let bodyContentLength: UInt64
         var hasInitialBoundary = false
@@ -172,6 +176,8 @@ public class MultipartFormData {
         Creates a body part from the data and appends it to the multipart form data object.
 
         The body part data will be encoded using the following format:
+     
+        从data生产body部分，并且从data object将它添加到多表单的
 
         - `Content-Disposition: form-data; name=#{name}; filename=#{filename}` (HTTP Header)
         - `Content-Type: #{mimeType}` (HTTP Header)
@@ -184,8 +190,10 @@ public class MultipartFormData {
         - parameter mimeType: The MIME type to associate with the data in the `Content-Type` HTTP header.
     */
     public func appendBodyPart(data data: NSData, name: String, fileName: String, mimeType: String) {
+        //  设置头部
         let headers = contentHeaders(name: name, fileName: fileName, mimeType: mimeType)
         let stream = NSInputStream(data: data)
+        // data的大小
         let length = UInt64(data.length)
 
         appendBodyPart(stream: stream, length: length, headers: headers)
@@ -217,7 +225,7 @@ public class MultipartFormData {
             appendBodyPart(fileURL: fileURL, name: name, fileName: fileName, mimeType: mimeType)
         } else {
             let failureReason = "Failed to extract the fileName of the provided URL: \(fileURL)"
-            setBodyPartError(code: NSURLErrorBadURL, failureReason: failureReason)
+            setBodyPartError(Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason))
         }
     }
 
@@ -245,7 +253,8 @@ public class MultipartFormData {
 
         guard fileURL.fileURL else {
             let failureReason = "The file URL does not point to a file URL: \(fileURL)"
-            setBodyPartError(code: NSURLErrorBadURL, failureReason: failureReason)
+            let error = Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason)
+            setBodyPartError(error)
             return
         }
 
@@ -260,7 +269,8 @@ public class MultipartFormData {
         }
 
         guard isReachable else {
-            setBodyPartError(code: NSURLErrorBadURL, failureReason: "The file URL is not reachable: \(fileURL)")
+            let error = Error.errorWithCode(NSURLErrorBadURL, failureReason: "The file URL is not reachable: \(fileURL)")
+            setBodyPartError(error)
             return
         }
 
@@ -275,7 +285,8 @@ public class MultipartFormData {
             where NSFileManager.defaultManager().fileExistsAtPath(path, isDirectory: &isDirectory) && !isDirectory else
         {
             let failureReason = "The file URL is a directory, not a file: \(fileURL)"
-            setBodyPartError(code: NSURLErrorBadURL, failureReason: failureReason)
+            let error = Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason)
+            setBodyPartError(error)
             return
         }
 
@@ -298,7 +309,8 @@ public class MultipartFormData {
 
         guard let length = bodyContentLength else {
             let failureReason = "Could not fetch attributes from the file URL: \(fileURL)"
-            setBodyPartError(code: NSURLErrorBadURL, failureReason: failureReason)
+            let error = Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason)
+            setBodyPartError(error)
             return
         }
 
@@ -308,7 +320,8 @@ public class MultipartFormData {
 
         guard let stream = NSInputStream(URL: fileURL) else {
             let failureReason = "Failed to create an input stream from the file URL: \(fileURL)"
-            setBodyPartError(code: NSURLErrorCannotOpenFile, failureReason: failureReason)
+            let error = Error.errorWithCode(NSURLErrorCannotOpenFile, failureReason: failureReason)
+            setBodyPartError(error)
             return
         }
 
@@ -364,7 +377,7 @@ public class MultipartFormData {
 
     /**
         Encodes all the appended body parts into a single `NSData` object.
-
+        编码所有bodyParts成一个单一的`NSData`对象
         It is important to note that this method will load all the appended body parts into memory all at the same 
         time. This method should only be used when the encoded data will have a small memory footprint. For large data 
         cases, please use the `writeEncodedDataToDisk(fileURL:completionHandler:)` method.
@@ -408,10 +421,10 @@ public class MultipartFormData {
 
         if let path = fileURL.path where NSFileManager.defaultManager().fileExistsAtPath(path) {
             let failureReason = "A file already exists at the given file URL: \(fileURL)"
-            throw Error.error(domain: NSURLErrorDomain, code: NSURLErrorBadURL, failureReason: failureReason)
+            throw Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason)
         } else if !fileURL.fileURL {
             let failureReason = "The URL does not point to a valid file: \(fileURL)"
-            throw Error.error(domain: NSURLErrorDomain, code: NSURLErrorBadURL, failureReason: failureReason)
+            throw Error.errorWithCode(NSURLErrorBadURL, failureReason: failureReason)
         }
 
         let outputStream: NSOutputStream
@@ -420,9 +433,10 @@ public class MultipartFormData {
             outputStream = possibleOutputStream
         } else {
             let failureReason = "Failed to create an output stream with the given URL: \(fileURL)"
-            throw Error.error(domain: NSURLErrorDomain, code: NSURLErrorCannotOpenFile, failureReason: failureReason)
+            throw Error.errorWithCode(NSURLErrorCannotOpenFile, failureReason: failureReason)
         }
 
+        outputStream.scheduleInRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
         outputStream.open()
 
         self.bodyParts.first?.hasInitialBoundary = true
@@ -433,9 +447,11 @@ public class MultipartFormData {
         }
 
         outputStream.close()
+        outputStream.removeFromRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
     }
 
     // MARK: - Private - Body Part Encoding
+    // BodyPart编码
 
     private func encodeBodyPart(bodyPart: BodyPart) throws -> NSData {
         let encoded = NSMutableData()
@@ -469,6 +485,7 @@ public class MultipartFormData {
 
     private func encodeBodyStreamDataForBodyPart(bodyPart: BodyPart) throws -> NSData {
         let inputStream = bodyPart.bodyStream
+        inputStream.scheduleInRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
         inputStream.open()
 
         var error: NSError?
@@ -487,7 +504,7 @@ public class MultipartFormData {
                 encoded.appendBytes(buffer, length: bytesRead)
             } else if bytesRead < 0 {
                 let failureReason = "Failed to read from input stream: \(inputStream)"
-                error = Error.error(domain: NSURLErrorDomain, code: .InputStreamReadFailed, failureReason: failureReason)
+                error = Error.errorWithCode(.InputStreamReadFailed, failureReason: failureReason)
                 break
             } else {
                 break
@@ -495,6 +512,7 @@ public class MultipartFormData {
         }
 
         inputStream.close()
+        inputStream.removeFromRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
 
         if let error = error {
             throw error
@@ -528,6 +546,7 @@ public class MultipartFormData {
 
     private func writeBodyStreamForBodyPart(bodyPart: BodyPart, toOutputStream outputStream: NSOutputStream) throws {
         let inputStream = bodyPart.bodyStream
+        inputStream.scheduleInRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
         inputStream.open()
 
         while inputStream.hasBytesAvailable {
@@ -546,13 +565,14 @@ public class MultipartFormData {
                 try writeBuffer(&buffer, toOutputStream: outputStream)
             } else if bytesRead < 0 {
                 let failureReason = "Failed to read from input stream: \(inputStream)"
-                throw Error.error(domain: NSURLErrorDomain, code: .InputStreamReadFailed, failureReason: failureReason)
+                throw Error.errorWithCode(.InputStreamReadFailed, failureReason: failureReason)
             } else {
                 break
             }
         }
 
         inputStream.close()
+        inputStream.removeFromRunLoop(NSRunLoop.currentRunLoop(), forMode: NSDefaultRunLoopMode)
     }
 
     private func writeFinalBoundaryDataForBodyPart(
@@ -587,7 +607,7 @@ public class MultipartFormData {
 
                 if bytesWritten < 0 {
                     let failureReason = "Failed to write to output stream: \(outputStream)"
-                    throw Error.error(domain: NSURLErrorDomain, code: .OutputStreamWriteFailed, failureReason: failureReason)
+                    throw Error.errorWithCode(.OutputStreamWriteFailed, failureReason: failureReason)
                 }
 
                 bytesToWrite -= bytesWritten
@@ -637,21 +657,25 @@ public class MultipartFormData {
     // MARK: - Private - Boundary Encoding
 
     private func initialBoundaryData() -> NSData {
+        // BodyPart数组的第一个BodyPart
         return BoundaryGenerator.boundaryData(boundaryType: .Initial, boundary: boundary)
     }
 
     private func encapsulatedBoundaryData() -> NSData {
+        // BodyPart数组中其他BodyPart
         return BoundaryGenerator.boundaryData(boundaryType: .Encapsulated, boundary: boundary)
     }
 
     private func finalBoundaryData() -> NSData {
+        // BodyPart数组中最后一个BodyPart编码
         return BoundaryGenerator.boundaryData(boundaryType: .Final, boundary: boundary)
     }
 
     // MARK: - Private - Errors
 
-    private func setBodyPartError(code code: Int, failureReason: String) {
-        guard bodyPartError == nil else { return }
-        bodyPartError = Error.error(domain: NSURLErrorDomain, code: code, failureReason: failureReason)
+    private func setBodyPartError(error: NSError) {
+        if bodyPartError == nil {
+            bodyPartError = error
+        }
     }
 }

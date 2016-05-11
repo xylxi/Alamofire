@@ -69,8 +69,8 @@ public enum ParameterEncoding {
     /**
         Creates a URL request by encoding parameters and applying them onto an existing request.
 
-        - parameter URLRequest: The request to have parameters applied.
-        - parameter parameters: The parameters to apply.
+        - parameter URLRequest: The request to have parameters applied
+        - parameter parameters: The parameters to apply
 
         - returns: A tuple containing the constructed request and the error that occurred during parameter encoding, 
                    if any.
@@ -82,11 +82,14 @@ public enum ParameterEncoding {
     {
         var mutableURLRequest = URLRequest.URLRequest
 
-        guard let parameters = parameters else { return (mutableURLRequest, nil) }
+        guard let parameters = parameters where !parameters.isEmpty else {
+            return (mutableURLRequest, nil)
+        }
 
         var encodingError: NSError? = nil
 
         switch self {
+            ///  对paramter进行编码后，拼接到URL上
         case .URL, .URLEncodedInURL:
             func query(parameters: [String: AnyObject]) -> String {
                 var components: [(String, String)] = []
@@ -116,10 +119,8 @@ public enum ParameterEncoding {
             }
 
             if let method = Method(rawValue: mutableURLRequest.HTTPMethod) where encodesParametersInURL(method) {
-                if let
-                    URLComponents = NSURLComponents(URL: mutableURLRequest.URL!, resolvingAgainstBaseURL: false)
-                    where !parameters.isEmpty
-                {
+                // 将参数编码后拼接都URL上
+                if let URLComponents = NSURLComponents(URL: mutableURLRequest.URL!, resolvingAgainstBaseURL: false) {
                     let percentEncodedQuery = (URLComponents.percentEncodedQuery.map { $0 + "&" } ?? "") + query(parameters)
                     URLComponents.percentEncodedQuery = percentEncodedQuery
                     mutableURLRequest.URL = URLComponents.URL
@@ -142,26 +143,20 @@ public enum ParameterEncoding {
                 let options = NSJSONWritingOptions()
                 let data = try NSJSONSerialization.dataWithJSONObject(parameters, options: options)
 
-                if mutableURLRequest.valueForHTTPHeaderField("Content-Type") == nil {
-                    mutableURLRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                }
-
+                mutableURLRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 mutableURLRequest.HTTPBody = data
             } catch {
                 encodingError = error as NSError
             }
         case .PropertyList(let format, let options):
+            // NSPropertyListSerialization针对于字典类型的序列化
             do {
                 let data = try NSPropertyListSerialization.dataWithPropertyList(
                     parameters,
                     format: format,
                     options: options
                 )
-
-                if mutableURLRequest.valueForHTTPHeaderField("Content-Type") == nil {
-                    mutableURLRequest.setValue("application/x-plist", forHTTPHeaderField: "Content-Type")
-                }
-
+                mutableURLRequest.setValue("application/x-plist", forHTTPHeaderField: "Content-Type")
                 mutableURLRequest.HTTPBody = data
             } catch {
                 encodingError = error as NSError
@@ -175,6 +170,7 @@ public enum ParameterEncoding {
 
     /**
         Creates percent-escaped, URL encoded query string components from the given key-value pair using recursion.
+        创建从给定的键值对使用递归％的转义，URL编码的查询字符串组件
 
         - parameter key:   The key of the query component.
         - parameter value: The value of the query component.
@@ -244,7 +240,7 @@ public enum ParameterEncoding {
             while index != string.endIndex {
                 let startIndex = index
                 let endIndex = index.advancedBy(batchSize, limit: string.endIndex)
-                let range = startIndex..<endIndex
+                let range = Range(start: startIndex, end: endIndex)
 
                 let substring = string.substringWithRange(range)
 

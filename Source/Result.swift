@@ -29,6 +29,7 @@ import Foundation
                provided associated value.
     - Failure: The request encountered an error resulting in a failure. The associated values are the original data 
                provided by the server as well as the error that caused the failure.
+    // 使用了范型Value,Error
 */
 public enum Result<Value, Error: ErrorType> {
     case Success(Value)

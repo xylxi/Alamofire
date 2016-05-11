@@ -25,18 +25,23 @@ import Foundation
 /**
     Responsible for sending a request and receiving the response and associated data from the server, as well as 
     managing its underlying `NSURLSessionTask`.
+ 
+    负责发送请求并接收来自所述服务器的响应和相关的数据，以及管理其underlying`NSURLSessionTask
 */
 public class Request {
 
     // MARK: - Properties
 
     /// The delegate for the underlying task.
+    /// 底层的task的代理
     public let delegate: TaskDelegate
 
     /// The underlying task.
+    /// 底层Task
     public var task: NSURLSessionTask { return delegate.task }
 
     /// The session belonging to the underlying task.
+    /// task所属的session
     public let session: NSURLSession
 
     /// The request sent or to be sent to the server.
@@ -48,9 +53,6 @@ public class Request {
     /// The progress of the request lifecycle.
     public var progress: NSProgress { return delegate.progress }
 
-    var startTime: CFAbsoluteTime?
-    var endTime: CFAbsoluteTime?
-
     // MARK: - Lifecycle
 
     init(session: NSURLSession, task: NSURLSessionTask) {
@@ -58,16 +60,14 @@ public class Request {
 
         switch task {
         case is NSURLSessionUploadTask:
-            delegate = UploadTaskDelegate(task: task)
+            self.delegate = UploadTaskDelegate(task: task)
         case is NSURLSessionDataTask:
-            delegate = DataTaskDelegate(task: task)
+            self.delegate = DataTaskDelegate(task: task)
         case is NSURLSessionDownloadTask:
-            delegate = DownloadTaskDelegate(task: task)
+            self.delegate = DownloadTaskDelegate(task: task)
         default:
-            delegate = TaskDelegate(task: task)
+            self.delegate = TaskDelegate(task: task)
         }
-
-        delegate.queue.addOperationWithBlock { self.endTime = CFAbsoluteTimeGetCurrent() }
     }
 
     // MARK: - Authentication
@@ -110,6 +110,7 @@ public class Request {
     /**
         Sets a closure to be called periodically during the lifecycle of the request as data is written to or read 
         from the server.
+        为代理设置回调时候触发的闭包
 
         - For uploads, the progress closure returns the bytes written, total bytes written, and total bytes expected 
           to write.
@@ -129,6 +130,13 @@ public class Request {
             downloadDelegate.downloadProgress = closure
         }
 
+        return self
+    }
+
+    public func progress1(closure:((NSURLSession, NSURLSessionDownloadTask, Int64, Int64, Int64) -> Void)? = nil ) ->Self {
+        if let downloadDelegate = delegate as? DownloadTaskDelegate {
+            downloadDelegate.downloadTaskDidWriteData = closure;
+        }
         return self
     }
 
@@ -154,21 +162,19 @@ public class Request {
     // MARK: - State
 
     /**
-        Resumes the request.
-    */
-    public func resume() {
-        if startTime == nil { startTime = CFAbsoluteTimeGetCurrent() }
-
-        task.resume()
-        NSNotificationCenter.defaultCenter().postNotificationName(Notifications.Task.DidResume, object: task)
-    }
-
-    /**
         Suspends the request.
+        挂起请求
     */
     public func suspend() {
         task.suspend()
-        NSNotificationCenter.defaultCenter().postNotificationName(Notifications.Task.DidSuspend, object: task)
+    }
+
+    /**
+        Resumes the request.
+        恢复请求
+    */
+    public func resume() {
+        task.resume()
     }
 
     /**
@@ -179,14 +185,13 @@ public class Request {
             downloadDelegate = delegate as? DownloadTaskDelegate,
             downloadTask = downloadDelegate.downloadTask
         {
+            // 当下载暂停时候，记录下重新启动时候需要从文件哪里开始下载
             downloadTask.cancelByProducingResumeData { data in
                 downloadDelegate.resumeData = data
             }
         } else {
             task.cancel()
         }
-
-        NSNotificationCenter.defaultCenter().postNotificationName(Notifications.Task.DidCancel, object: task)
     }
 
     // MARK: - TaskDelegate
@@ -194,19 +199,24 @@ public class Request {
     /**
         The task delegate is responsible for handling all delegate callbacks for the underlying task as well as 
         executing all operations attached to the serial operation queue upon task completion.
+        任务委托负责处理所有代表回调的基本任务，
+        以及执行附加到任务完成时，串行操作队列中的所有操作。
+    
+        task代理的基类
     */
     public class TaskDelegate: NSObject {
 
         /// The serial operation queue used to execute all operations after the task completes.
+        /// 串行队列，用于在任务结束后，执行队列的操作
         public let queue: NSOperationQueue
 
         let task: NSURLSessionTask
+        ///  记录进度
         let progress: NSProgress
 
         var data: NSData? { return nil }
         var error: NSError?
-
-        var initialResponseTime: CFAbsoluteTime?
+        //?? 用于认证
         var credential: NSURLCredential?
 
         init(task: NSURLSessionTask) {
@@ -215,12 +225,18 @@ public class Request {
             self.queue = {
                 let operationQueue = NSOperationQueue()
                 operationQueue.maxConcurrentOperationCount = 1
+                /**
+                *  默认初始化时候queue处于挂起状态
+                *  即，添加到队列的任务不会被执行
+                *  当请求结束后，设置为false，调度队列里的任务
+                */
+                // 暂停queue
                 operationQueue.suspended = true
 
                 if #available(OSX 10.10, *) {
+                    //??
                     operationQueue.qualityOfService = NSQualityOfService.Utility
                 }
-
                 return operationQueue
             }()
         }
@@ -284,7 +300,7 @@ public class Request {
                 }
             } else {
                 if challenge.previousFailureCount > 0 {
-                    disposition = .RejectProtectionSpace
+                    disposition = .CancelAuthenticationChallenge
                 } else {
                     credential = self.credential ?? session.configuration.URLCredentialStorage?.defaultCredentialForProtectionSpace(challenge.protectionSpace)
 
@@ -321,12 +337,16 @@ public class Request {
                     if let
                         downloadDelegate = self as? DownloadTaskDelegate,
                         userInfo = error.userInfo as? [String: AnyObject],
+                        // 下载过程中出现失败痛过 error.userInfo[NSURLSessionDownloadTaskResumeData]，获取resumeData
                         resumeData = userInfo[NSURLSessionDownloadTaskResumeData] as? NSData
                     {
                         downloadDelegate.resumeData = resumeData
                     }
                 }
-
+                /// 在初始化queue的时候，队列是被挂起的
+                /// 当请求结束后，将挂起状态设置为false
+                /// queue就回去调度queue内的任务
+                // 继续queue
                 queue.suspended = false
             }
         }
@@ -338,6 +358,7 @@ public class Request {
         var dataTask: NSURLSessionDataTask? { return task as? NSURLSessionDataTask }
 
         private var totalBytesReceived: Int64 = 0
+        // 用户保存从服务器过来的数据
         private var mutableData: NSMutableData
         override var data: NSData? {
             if dataStream != nil {
@@ -393,8 +414,6 @@ public class Request {
         }
 
         func URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveData data: NSData) {
-            if initialResponseTime == nil { initialResponseTime = CFAbsoluteTimeGetCurrent() }
-
             if let dataTaskDidReceiveData = dataTaskDidReceiveData {
                 dataTaskDidReceiveData(session, dataTask, data)
             } else {
@@ -484,7 +503,7 @@ extension Request: CustomDebugStringConvertible {
             let protectionSpace = NSURLProtectionSpace(
                 host: host,
                 port: URL.port?.integerValue ?? 0,
-                protocol: URL.scheme,
+                `protocol`: URL.scheme,
                 realm: host,
                 authenticationMethod: NSURLAuthenticationMethodHTTPBasic
             )

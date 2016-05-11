@@ -281,6 +281,14 @@ extension Manager {
     {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)) {
             let formData = MultipartFormData()
+            /* 
+            (fdata) -> Void in
+                fdata.appendBodyPart(
+                    data: data, 
+                    name: "file",
+                    fileName: "avatar" , 
+                    mimeType: "image/JPEG")
+            */
             multipartFormData(formData)
 
             let URLRequestWithContentType = URLRequest.URLRequest
@@ -288,16 +296,20 @@ extension Manager {
 
             let isBackgroundSession = self.session.configuration.identifier != nil
 
+            // 如果data的大小小于预定的内存大小，而且不是后台sesion
             if formData.contentLength < encodingMemoryThreshold && !isBackgroundSession {
                 do {
+                    // 对formData的[BodyPart]编码
                     let data = try formData.encode()
                     let encodingResult = MultipartFormDataEncodingResult.Success(
+                        // 根据request和data创建Request对象，并且会上传
                         request: self.upload(URLRequestWithContentType, data: data),
                         streamingFromDisk: false,
                         streamFileURL: nil
                     )
 
                     dispatch_async(dispatch_get_main_queue()) {
+                        // 如果编码成功触发的回调
                         encodingCompletion?(encodingResult)
                     }
                 } catch {
@@ -306,6 +318,7 @@ extension Manager {
                     }
                 }
             } else {
+                // 如果是大文件
                 let fileManager = NSFileManager.defaultManager()
                 let tempDirectoryURL = NSURL(fileURLWithPath: NSTemporaryDirectory())
                 let directoryURL = tempDirectoryURL.URLByAppendingPathComponent("com.alamofire.manager/multipart.form.data")
@@ -359,8 +372,6 @@ extension Request {
             totalBytesSent: Int64,
             totalBytesExpectedToSend: Int64)
         {
-            if initialResponseTime == nil { initialResponseTime = CFAbsoluteTimeGetCurrent() }
-
             if let taskDidSendBodyData = taskDidSendBodyData {
                 taskDidSendBodyData(session, task, bytesSent, totalBytesSent, totalBytesExpectedToSend)
             } else {

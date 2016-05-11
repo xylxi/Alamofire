@@ -21,6 +21,7 @@
 // THE SOFTWARE.
 
 import UIKit
+import Alamofire
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, UISplitViewControllerDelegate {
@@ -38,6 +39,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UISplitViewControllerDele
         let navigationController = splitViewController.viewControllers.last as! UINavigationController
         navigationController.topViewController!.navigationItem.leftBarButtonItem = splitViewController.displayModeButtonItem()
         splitViewController.delegate = self
+
+        
+        let bd = "http://www.renrenlab.com/testing/api/user/login"
+        let parameters = ["user" : "mm小 明gg" , "password" : "123456"]
+        let request = NSURLRequest(URL: NSURL(string: bd)!)
+        let result = ParameterEncoding.URL.encode(request, parameters: parameters);
+        print(result.0.URLString)
+        
 
         return true
     }
